@@ -18,7 +18,7 @@ const sortDesc = (key) => (a, b) => {
   if (x === y) return 0;
   if (x === undefined) return 1;
   if (y === undefined) return -1;
-  return x < y ? 1 : -1;
+  return x < y ? 1 : x > y ? -1 : 0;
 };
 
 // Reference checks keep one session on one patient even if a server returns
@@ -42,14 +42,15 @@ export function createSession(ehr, opts = {}) {
   let pref;
   const allowWrites = !!opts.allowWrites;
   const purpose = opts.purposeOfUse ?? "TREAT";
-  const runId = opts.runId;
+  let runId = opts.runId;
   const vendor = ehr.vendor;
 
   const need = () => { if (!patientId) throw new ToolError("no patient selected; call find_patient then select_patient", "no_patient"); return patientId; };
 
   async function audit(action, resourceType, status, tool) {
     t.audit({
-      time: new Date().toISOString(), action, outcome: status < 400 ? "0" : status < 500 ? "4" : "8",
+      // 0 means the request never got an answer (transport failure): serious.
+      time: new Date().toISOString(), action, outcome: status > 0 && status < 400 ? "0" : status >= 400 && status < 500 ? "4" : "8",
       vendor: vendor.name, resource_type: resourceType, patient_ref: pref ??= await patientRef(patientId, opts.telemetrySalt),
       agent_run: runId, tool, purpose_of_use: purpose, client_id: ehr.clientId, status,
     });
@@ -122,7 +123,7 @@ export function createSession(ehr, opts = {}) {
       const since = a.since ?? new Date().toISOString().slice(0, 10);
       const date = [`ge${since}`, a.until ? `le${a.until}` : undefined].filter(Boolean);
       const out = await search("Appointment", { patient: need(), date }, 50, "list_appointments", ctx.span);
-      return list(out.resources.map(P.appointment).sort((x, y) => (x.start ?? "~") < (y.start ?? "~") ? -1 : 1), out.truncated);
+      return list(out.resources.map(P.appointment).sort((x, y) => ((x.start ?? "~") < (y.start ?? "~") ? -1 : (x.start ?? "~") > (y.start ?? "~") ? 1 : 0)), out.truncated);
     },
     async list_documents(a, ctx) {
       const out = await search("DocumentReference", { patient: need(), date: dateGe(a.since), _sort: "-date" }, a.limit ?? 10, "list_documents", ctx.span);
@@ -155,6 +156,7 @@ export function createSession(ehr, opts = {}) {
     },
     async create_note(a, ctx) {
       const pid = need();
+      if (typeof a.title !== "string" || typeof a.text !== "string" || !a.text.trim()) throw new ToolError("create_note needs title and text strings", "bad_args");
       if (!allowWrites) { t.log("warn", "write.denied", { "gen_ai.tool.name": "create_note" }); throw new ToolError("writes are disabled for this session", "writes_disabled"); }
       if (!opts.approve) throw new ToolError("writes need an approve callback", "no_approver");
       const ok = await opts.approve({ tool: "create_note", args: a, summary: `Save note "${a.title}" (${a.text.length} chars) to the chart` });
@@ -172,6 +174,8 @@ export function createSession(ehr, opts = {}) {
 
   return {
     get patientId() { return patientId; },
+    get runId() { return runId; },
+    set runId(v) { runId ??= v; }, // runAgent fills it in for audit records
     // Tool definitions for a model API. Unbound-only tools vanish once bound;
     // write tools appear only when writes are allowed.
     definitions() {

@@ -122,7 +122,7 @@ await session.call("create_note", { title, text });  // { ok, result } or { ok: 
 Other safeguards:
 - The session is bound to one patient. Tools drop any returned resource that belongs to someone else, and `read_document` refuses another patient's note.
 - Writes are off by default. Each one needs `approve()` to return `true`. A declined write is not retried.
-- Budgets stop runaway loops: `maxSteps` 8, `maxToolCalls` 20, `maxTokens` 30,000, `maxOutputTokens` 1,024 per call. `out.stop` says which one fired (`output_truncated` when a reply hit the output cap).
+- Budgets stop runaway loops: `maxSteps` 8, `maxToolCalls` 20, `maxTokens` 60,000, `maxOutputTokens` 4,096 per call (reasoning models spend output tokens on hidden reasoning). `out.stop` says which one fired (`output_truncated` when a reply hit the output cap).
 
 ## Telemetry (OpenTelemetry compatible)
 

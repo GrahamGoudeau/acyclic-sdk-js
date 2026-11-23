@@ -32,7 +32,7 @@ export class FhirClient {
     this.maxRetries = opts.maxRetries ?? 3;
     this.inspect = opts.inspect;
     this.headers = opts.headers ?? {};
-    this.getToken = tokenSource({ ...opts.auth, tokenUrl: opts.tokenUrl, fetch: this.fetch });
+    this.getToken = tokenSource({ ...opts.auth, tokenUrl: opts.tokenUrl, fetch: this.fetch, telemetry: this.t, vendor: this.vendor });
   }
 
   // path: "Patient/123" or "Observation"; params: object or URLSearchParams.

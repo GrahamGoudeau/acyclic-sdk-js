@@ -42,7 +42,7 @@ export class AuthError extends Error {
 }
 
 // Returns getToken({ force }) with in-memory caching and single-flight refresh.
-export function tokenSource({ method, clientId, clientSecret, privateKey, alg = "RS384", kid, tokenUrl, scopes, fetch: f = fetch, onRequest }) {
+export function tokenSource({ method, clientId, clientSecret, privateKey, alg = "RS384", kid, tokenUrl, scopes, fetch: f = fetch, onRequest, telemetry, vendor }) {
   let cached; // { token, expiresAt }
   let inflight;
   let keyPromise;
@@ -69,9 +69,27 @@ export function tokenSource({ method, clientId, clientSecret, privateKey, alg = 
     return cached.token;
   }
 
+  // One "POST token" span and a token.refresh log per request; never the
+  // assertion, secret or token.
+  async function traced() {
+    const host = (() => { try { return new URL(tokenUrl).hostname; } catch { return undefined; } })();
+    const span = telemetry?.startSpan("POST token", { "http.request.method": "POST", "server.address": host, "acyclic.vendor": vendor });
+    try {
+      const tok = await request();
+      span?.setAttributes({ "http.response.status_code": 200 });
+      span?.end();
+      telemetry?.log("info", "token.refresh", { "acyclic.vendor": vendor, "server.address": host });
+      return tok;
+    } catch (e) {
+      span?.setAttributes({ "http.response.status_code": e.status, "error.type": e.code ?? e.type ?? "auth" });
+      span?.end(e);
+      throw e;
+    }
+  }
+
   return async function getToken({ force = false } = {}) {
     if (!force && cached && cached.expiresAt - Date.now() > 60_000) return cached.token;
-    inflight ??= request().finally(() => { inflight = undefined; });
+    inflight ??= traced().finally(() => { inflight = undefined; });
     return inflight;
   };
 }

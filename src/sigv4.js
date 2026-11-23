@@ -23,7 +23,7 @@ export async function sigV4({ method, url, region, service, body = "", credentia
   if (credentials.sessionToken) h["x-amz-security-token"] = credentials.sessionToken;
   const names = Object.keys(h).sort();
   const canonicalUri = u.pathname.split("/").map(encodeSegment).join("/") || "/";
-  const query = [...u.searchParams].map(([k, v]) => [encodeURIComponent(k), encodeURIComponent(v)]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join("&");
+  const query = [...u.searchParams].map(([k, v]) => [encodeURIComponent(k), encodeURIComponent(v)]).sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join("&");
   const canonical = [method, canonicalUri, query, names.map((n) => `${n}:${h[n]}\n`).join(""), names.join(";"), payloadHash].join("\n");
   const scope = `${day}/${region}/${service}/aws4_request`;
   const toSign = ["AWS4-HMAC-SHA256", amzDate, scope, await sha256(canonical)].join("\n");

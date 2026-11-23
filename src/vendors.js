@@ -31,7 +31,7 @@ function note(pid, a, { contentType = "text/plain", extra = {} } = {}) {
 // The most recent encounter, for vendors that file notes against one.
 async function latestEncounter(pid, ehr, ctx) {
   const { resources } = await ehr.fhir.search("Encounter", ehr.vendor.searchParams("Encounter", { patient: pid }, ehr), { limit: 50, parent: ctx?.span });
-  return resources.map((e) => ({ id: e.id, start: e.period?.start ?? "" })).sort((x, y) => (x.start < y.start ? 1 : -1))[0]?.id;
+  return resources.map((e) => ({ id: e.id, start: e.period?.start ?? "" })).sort((x, y) => (x.start < y.start ? 1 : x.start > y.start ? -1 : 0))[0]?.id;
 }
 
 // Observation: Epic rejects category with code; Oracle ignores code when a
@@ -92,6 +92,7 @@ async function athenaAppointments(a, h) {
   const practice = ehr.practiceId;
   if (!practice) throw new Error("athena needs practiceId for the appointments API");
   const enterprise = patientId.split(".E-")[1];
+  if (!enterprise) { const e = new Error("not an athena patient id (a-{practice}.E-{id})"); e.code = "bad_patient_id"; throw e; }
   const base = ehr.fhir.baseUrl.replace(/\/fhir\/r4$/i, `/v1/${practice}`);
   const body = await ehr.fhir.request("GET", `${base}/patients/${encodeURIComponent(enterprise)}/appointments`, {
     params: { showpast: a.since && a.since < new Date().toISOString().slice(0, 10) ? "true" : undefined }, accept: "application/json", parent: span, resourceType: "Appointment",
@@ -100,10 +101,11 @@ async function athenaAppointments(a, h) {
   const items = (body.appointments || []).map((x) => {
     const [mm, dd, yyyy] = String(x.date).split("/");
     const start = `${yyyy}-${mm}-${dd}T${x.starttime}`;
-    const end = x.duration ? new Date(Date.parse(`${start}:00Z`) + x.duration * 60000).toISOString().slice(0, 16) : undefined;
+    const t = Date.parse(`${start}:00Z`);
+    const end = x.duration && Number.isFinite(t) ? new Date(t + x.duration * 60000).toISOString().slice(0, 16) : undefined;
     return Object.fromEntries(Object.entries({ id: String(x.appointmentid), status: ATHENA_STATUS[x.appointmentstatus] ?? x.appointmentstatus, start, end, type: x.appointmenttype || x.patientappointmenttypename }).filter(([, v]) => v));
   }).filter((x) => x.start.slice(0, 10) >= since && (!a.until || x.start.slice(0, 10) <= a.until));
-  items.sort((x, y) => (x.start < y.start ? -1 : 1));
+  items.sort((x, y) => (x.start < y.start ? -1 : x.start > y.start ? 1 : 0));
   return { items, total: items.length, truncated: false };
 }
 

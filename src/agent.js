@@ -26,7 +26,7 @@ export class BudgetError extends Error {}
 //   dataPolicy           REQUIRED: "baa" (model.coveredByBAA must be true) or
 //                        "synthetic" (only sandbox hosts allowed)
 //   system               system prompt (default DEFAULT_SYSTEM)
-//   maxSteps 8, maxToolCalls 20, maxTokens 30000 total, maxOutputTokens 1024 per call
+//   maxSteps 8, maxToolCalls 20, maxTokens 60000 total, maxOutputTokens 4096 per call (reasoning models spend output tokens on hidden reasoning)
 //   (stop is "done", "max_steps", "max_tokens", "max_tool_calls" or "output_truncated")
 //   store                ConversationStore; saves after every step
 //   conversationId       resume or name the conversation in the store
@@ -37,7 +37,8 @@ export async function runAgent(opts) {
   checkPolicy(opts.dataPolicy, model, ehr);
   const t = guard(ehr.telemetry);
   const runId = opts.conversationId ?? randomId("run_");
-  const maxSteps = opts.maxSteps ?? 8, maxToolCalls = opts.maxToolCalls ?? 20, maxTokens = opts.maxTokens ?? 30000;
+  session.runId = runId;
+  const maxSteps = opts.maxSteps ?? 8, maxToolCalls = opts.maxToolCalls ?? 20, maxTokens = opts.maxTokens ?? 60000;
   const emit = (e) => { try { opts.onEvent?.(e); } catch {} };
 
   let messages = opts.messages ? [...opts.messages] : (await opts.store?.load(runId)) ?? [];
@@ -60,7 +61,7 @@ export async function runAgent(opts) {
       const ms = t.startSpan(`chat ${model.model}`, { "gen_ai.operation.name": "chat", "gen_ai.provider.name": model.provider, "gen_ai.request.model": model.model }, span);
       let reply;
       try {
-        reply = await model.chat({ messages, tools, maxTokens: opts.maxOutputTokens ?? 1024, signal: opts.signal });
+        reply = await model.chat({ messages, tools, maxTokens: opts.maxOutputTokens ?? 4096, signal: opts.signal });
         ms.setAttributes({ "gen_ai.usage.input_tokens": reply.usage.input, "gen_ai.usage.output_tokens": reply.usage.output, "gen_ai.response.finish_reasons": [String(reply.finishReason)] });
         ms.end();
       } catch (e) { ms.setAttributes({ "error.type": e.type ?? "model_error" }); ms.end(e); throw e; }
