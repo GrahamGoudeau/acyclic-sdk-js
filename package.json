@@ -1,0 +1,17 @@
+{
+  "name": "acyclic-sdk",
+  "version": "0.1.0",
+  "description": "Zero-dependency EHR agent springboard: SMART Backend Services auth, FHIR R4 tools for Epic, Oracle Health, athenahealth, MEDITECH and eClinicalWorks, an agent loop, and HIPAA-safe telemetry.",
+  "type": "module",
+  "exports": { ".": "./src/index.js" },
+  "files": ["src", "spec", "LICENSE", "NOTICE", "README.md"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/",
+    "sync-spec": "node scripts/sync-spec.mjs"
+  },
+  "repository": { "type": "git", "url": "https://github.com/GrahamGoudeau/acyclic-sdk-js" },
+  "homepage": "https://agentsdk.acyclic.sh",
+  "keywords": ["fhir", "ehr", "epic", "cerner", "oracle-health", "athenahealth", "meditech", "eclinicalworks", "smart-on-fhir", "agent", "llm", "hipaa", "opentelemetry"],
+  "license": "Apache-2.0"
+}
