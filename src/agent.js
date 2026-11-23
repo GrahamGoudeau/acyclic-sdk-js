@@ -62,7 +62,7 @@ export async function runAgent(opts) {
       let reply;
       try {
         reply = await model.chat({ messages, tools, maxTokens: opts.maxOutputTokens ?? 4096, signal: opts.signal });
-        ms.setAttributes({ "gen_ai.usage.input_tokens": reply.usage.input, "gen_ai.usage.output_tokens": reply.usage.output, "gen_ai.response.finish_reasons": [String(reply.finishReason)] });
+        ms.setAttributes({ "gen_ai.usage.input_tokens": reply.usage.input, "gen_ai.usage.output_tokens": reply.usage.output, "gen_ai.response.finish_reasons": reply.finishReason ? [String(reply.finishReason)] : undefined });
         ms.end();
       } catch (e) { ms.setAttributes({ "error.type": e.type ?? "model_error" }); ms.end(e); throw e; }
       usage.input += reply.usage.input ?? 0; usage.output += reply.usage.output ?? 0;

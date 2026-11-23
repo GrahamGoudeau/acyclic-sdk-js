@@ -99,13 +99,14 @@ export class FhirClient {
   async search(type, params, { limit = 50, parent } = {}) {
     const resources = [];
     let page = await this.request("GET", type, { params, parent, resourceType: type });
-    for (;;) {
+    for (let pages = 1; ; pages++) {
       for (const e of page.entry || []) {
         if (e.search?.mode === "outcome" || e.resource?.resourceType === "OperationOutcome") continue;
         if (e.resource?.resourceType !== type) continue; // _include results and similar
         resources.push(e.resource);
       }
       const next = page.link?.find((l) => l.relation === "next")?.url;
+      if (pages >= MAX_PAGES) return { resources: resources.slice(0, limit), truncated: true }; // a server looping its next link
       if (resources.length >= limit || !next) {
         return { resources: resources.slice(0, limit), truncated: resources.length > limit || (resources.length >= limit && !!next) };
       }
@@ -115,15 +116,18 @@ export class FhirClient {
 
   // "/api/FHIR/R4/Patient/{id}" style template: never ids, never query.
   template(url) {
+    // Keep resource types, $operations and a few fixed path words; every
+    // other segment could be an id, even an all-lowercase one.
     const basePath = this.base.pathname.replace(/\/$/, "");
-    let rest = url.pathname.startsWith(basePath) ? url.pathname.slice(basePath.length) : url.pathname;
-    const parts = rest.split("/").filter(Boolean);
-    // Keep resource types, $operations and plain lowercase words; anything
-    // with a digit, dot or dash may be an id.
-    const t = parts.map((p) => (/^[A-Z][A-Za-z]+$/.test(p) || /^\$[a-z-]+$/.test(p) || /^[a-z]+$/.test(p) ? p : "{id}"));
-    return basePath + "/" + t.join("/");
+    const inBase = url.pathname.startsWith(basePath + "/");
+    const parts = (inBase ? url.pathname.slice(basePath.length) : url.pathname).split("/").filter(Boolean);
+    const t = parts.map((p) => (/^[A-Z][A-Za-z]+$/.test(p) || /^\$[a-z-]+$/.test(p) || FIXED.has(p) ? p : "{id}"));
+    return (inBase ? basePath : "") + "/" + t.join("/");
   }
 }
+
+const FIXED = new Set(["_history", "_search", "v1", "patients", "appointments"]);
+const MAX_PAGES = 100;
 
 function retryAfter(res) {
   const h = res.headers.get("retry-after");

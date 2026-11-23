@@ -197,6 +197,7 @@ export function createSession(ehr, opts = {}) {
             }
           : handlers[name];
         if (!h || !this.definitions().some((d) => d.name === name)) throw new ToolError(`tool ${name} is not available`, "unknown_tool");
+        checkArgs(name, args ?? {});
         const result = await h(args ?? {}, { span });
         if (pref) span.setAttributes({ "acyclic.patient_ref": pref });
         if (Array.isArray(result?.items)) span.setAttributes({ "fhir.result_count": result.items.length });
@@ -210,6 +211,19 @@ export function createSession(ehr, opts = {}) {
       }
     },
   };
+}
+
+// Required arguments and string types from the tool's JSON Schema.
+function checkArgs(name, args) {
+  const spec = TOOL_SPECS.find((s) => s.name === name)?.input_schema;
+  if (!spec) return;
+  if (typeof args !== "object" || Array.isArray(args)) throw new ToolError("arguments must be an object", "bad_args");
+  for (const k of spec.required ?? []) if (args[k] === undefined || args[k] === null || args[k] === "") throw new ToolError(`${k} is required`, "bad_args");
+  for (const [k, v] of Object.entries(args)) {
+    const want = spec.properties?.[k]?.type;
+    if (want === "string" && typeof v !== "string") throw new ToolError(`${k} must be a string`, "bad_args");
+    if (want === "integer" && !Number.isInteger(v)) throw new ToolError(`${k} must be an integer`, "bad_args");
+  }
 }
 
 function defaultNote(pid, a) {
